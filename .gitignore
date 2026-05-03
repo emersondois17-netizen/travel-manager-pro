@@ -1,0 +1,6 @@
+﻿node_modules/
+.env
+server/.env
+frontend/.env
+dist/
+.vite/
