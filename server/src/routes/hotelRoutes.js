@@ -10,9 +10,10 @@ const upload = multer(); // Armazena o arquivo temporariamente na memória (buff
 const HotelController = require('../controllers/HotelController');
 
 // Rota para processar o voucher com IA e salvar
-router.post('/processar', upload.single('voucher'), HotelController.processarVoucher);
+router.post('/processar', upload.single('file'), HotelController.processarVoucher);
 
 // Rota para buscar todas as reservas de um cliente específico
 router.get('/cliente/:clienteId', HotelController.listarPorCliente);
+router.get('/', HotelController.listarTodos);
 
 module.exports = router;

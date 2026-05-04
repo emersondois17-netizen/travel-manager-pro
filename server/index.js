@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./src/config/db');
+const vooRoutes = require('./src/routes/vooRoutes');
 
 const app = express();
 
@@ -12,9 +13,11 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 
+
 // --- ROTAS DO SISTEMA ---
 app.use('/api/clientes', require('./src/routes/clienteRoutes'));
 app.use('/api/hoteis', require('./src/routes/hotelRoutes'));
+app.use('/api/voos', vooRoutes);
 // Em breve adicionaremos: app.use('/api/hoteis', require('./src/routes/hotelRoutes'));
 
 const PORT = process.env.PORT || 5000;
