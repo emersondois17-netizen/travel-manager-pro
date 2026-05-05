@@ -15,6 +15,7 @@ app.use(express.json());
 
 
 // --- ROTAS DO SISTEMA ---
+app.use('/api/dashboard', require('./src/routes/DashboardRoutes'));
 app.use('/api/clientes', require('./src/routes/clienteRoutes'));
 app.use('/api/hoteis', require('./src/routes/hotelRoutes'));
 app.use('/api/voos', vooRoutes);

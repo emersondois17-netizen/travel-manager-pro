@@ -1,10 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, PlaneTakeoff, BedDouble, Ticket } from 'lucide-react';
+
+// Importação dos componentes de página
+import Dashboard from './pages/Dashboard'; // Certifique-se que o arquivo existe em src/pages/Dashboard.jsx
 import Clientes from './pages/Clientes';
 import Passageiros from './pages/Passageiros';
 import Hotelaria from './pages/Hotelaria';
-import Aereo from './pages/Aereo'; // Importamos a nova página
+import Aereo from './pages/Aereo';
 
 const SidebarLink = ({ to, icon: Icon, children }) => {
   const location = useLocation();
@@ -28,6 +31,7 @@ function App() {
     <Router>
       <div className="flex h-screen bg-slate-50 font-sans">
         
+        {/* Menu Lateral */}
         <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10">
           <div className="p-6 flex items-center gap-3 mb-6 border-b border-slate-800">
             <PlaneTakeoff className="text-blue-400" size={32} />
@@ -38,10 +42,11 @@ function App() {
           </div>
           
           <nav className="flex-1 px-4">
+            {/* O link principal "/" agora deve levar ao Dashboard */}
             <SidebarLink to="/" icon={LayoutDashboard}>Dashboard</SidebarLink>
             <SidebarLink to="/clientes" icon={Users}>Clientes (CRM)</SidebarLink>
             <SidebarLink to="/passageiros" icon={PlaneTakeoff}>Em Viagem</SidebarLink>
-            <SidebarLink to="/aereo" icon={Ticket}>Aéreo</SidebarLink> {/* Novo Link */}
+            <SidebarLink to="/aereo" icon={Ticket}>Aéreo</SidebarLink>
             <SidebarLink to="/hotelaria" icon={BedDouble}>Hotelaria</SidebarLink>
           </nav>
           
@@ -50,12 +55,14 @@ function App() {
           </div>
         </aside>
 
+        {/* Área Principal */}
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/" element={<div className="p-8 text-2xl font-bold text-slate-400">Dashboard em construção...</div>} />
+            {/* Aqui é onde a mágica acontece: associamos o caminho "/" ao componente Dashboard */}
+            <Route path="/" element={<Dashboard />} /> 
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/passageiros" element={<Passageiros />} />
-            <Route path="/aereo" element={<Aereo />} /> {/* Nova Rota */}
+            <Route path="/aereo" element={<Aereo />} />
             <Route path="/hotelaria" element={<Hotelaria />} />
           </Routes>
         </main>

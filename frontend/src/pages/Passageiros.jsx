@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { PlaneTakeoff, MapPin, CalendarDays, BedDouble, Plane } from 'lucide-react';
+import { Plane, BedDouble, MapPin, CalendarDays, CheckCircle2, RefreshCw, MessageSquare, Trash2 } from 'lucide-react';
 
 const formatarData = (dataIso) => {
     if (!dataIso) return '--/--/----';
@@ -9,134 +9,159 @@ const formatarData = (dataIso) => {
 };
 
 const Passageiros = () => {
-    const [operacoes, setOperacoes] = useState([]);
+    const [hoteis, setHoteis] = useState([]);
+    const [voos, setVoos] = useState([]);
+    const [abaAtiva, setAbaAtiva] = useState('aereo');
     const [loading, setLoading] = useState(true);
+    const [sincronizandoId, setSincronizandoId] = useState(null);
 
-    useEffect(() => {
-        const fetchTodasOperacoes = async () => {
-            try {
-                // Dispara as duas requisições ao mesmo tempo (muito mais rápido!)
-                const [resHoteis, resVoos] = await Promise.all([
-                    api.get('/hoteis'),
-                    api.get('/voos')
-                ]);
+    const fetchTudo = async () => {
+        try {
+            const [resH, resV] = await Promise.all([api.get('/hoteis'), api.get('/voos')]);
+            const agora = new Date();
+            const vinteQuatroHorasAtras = new Date(agora.getTime() - (24 * 60 * 60 * 1000));
 
-                // Padroniza os dados dos Hotéis
-                const hoteisFormatados = resHoteis.data.map(h => ({
-                    ...h,
-                    tipoOperacao: 'HOTEL',
-                    dataComparacao: new Date(h.checkIn),
-                    tituloPrincipal: h.hotel,
-                    subtitulo: h.cidade,
-                    nomeViajante: h.hospede
-                }));
+            setHoteis(resH.data.filter(h => new Date(h.checkOut) >= vinteQuatroHorasAtras));
+            setVoos(resV.data.filter(v => !(v.statusMonitoramento === 'Pousado' && new Date(v.dataEmbarque) < vinteQuatroHorasAtras)));
+        } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
 
-                // Padroniza os dados dos Voos
-                const voosFormatados = resVoos.data.map(v => ({
-                    ...v,
-                    tipoOperacao: 'VOO',
-                    dataComparacao: new Date(v.dataEmbarque),
-                    tituloPrincipal: `${v.ciaAerea} (${v.origem} ➔ ${v.destino})`,
-                    subtitulo: 'Voo / Trecho',
-                    nomeViajante: v.passageiro
-                }));
+    useEffect(() => { fetchTudo(); }, []);
 
-                // Junta tudo em um único array e ordena pela data mais próxima
-                const tudoJunto = [...hoteisFormatados, ...voosFormatados].sort((a, b) => a.dataComparacao - b.dataComparacao);
-
-                setOperacoes(tudoJunto);
-            } catch (error) {
-                console.error('Erro ao buscar operações de viagem', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchTodasOperacoes();
-    }, []);
-
-    const calcularStatus = (dataBase) => {
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0); 
+    // FUNÇÃO CORRIGIDA PARA O WHATSAPP
+    const handleEnviarResumo = (op) => {
+        const isVoo = !!op.origem; // Identifica se é voo pelos campos existentes
+        const nomeParaMensagem = op.passageiro || op.hospede || "Passageiro";
         
-        const dataComparacao = new Date(dataBase);
-        dataComparacao.setHours(0, 0, 0, 0);
+        let mensagem = `*Olá, ${nomeParaMensagem}!* %0A%0A`;
+        
+        if (isVoo) {
+            mensagem += `✈️ *RESUMO DO SEU VOO* %0A`;
+            mensagem += `📍 Trecho: ${op.origem} ➔ ${op.destino} %0A`;
+            mensagem += `🏢 Cia: ${op.ciaAerea} ${op.numeroVoo || ''} %0A`;
+            mensagem += `📅 Data: ${new Date(op.dataEmbarque).toLocaleString('pt-BR')} %0A`;
+            mensagem += `🔑 Localizador: *${op.localizador}* %0A%0A`;
+        } else {
+            mensagem += `🏨 *RESUMO DA SUA HOSPEDAGEM* %0A`;
+            mensagem += `📍 Hotel: ${op.hotel} %0A`;
+            mensagem += `📅 Check-in: ${formatarData(op.checkIn)} %0A`;
+            mensagem += `📅 Check-out: ${formatarData(op.checkOut)} %0A`;
+            mensagem += `🔑 Localizador: *${op.localizador}* %0A%0A`;
+        }
 
-        if (hoje < dataComparacao) return { label: 'Em Breve', color: 'bg-amber-100 text-amber-800 border-amber-200' };
-        if (hoje.getTime() === dataComparacao.getTime()) return { label: 'Em Viagem', color: 'bg-emerald-100 text-emerald-800 border-emerald-300 animate-pulse' };
-        return { label: 'Concluída', color: 'bg-slate-100 text-slate-600 border-slate-200' };
+        mensagem += `Boa viagem! Desejamos uma excelente experiência. %0A_TravelManager Pro_`;
+        
+        window.open(`https://wa.me/?text=${mensagem}`, '_blank');
+    };
+
+    const handleSincronizar = async (id) => {
+        setSincronizandoId(id);
+        try {
+            await api.get(`/voos/${id}/sincronizar`);
+            fetchTudo();
+        } catch (e) { 
+            alert(e.response?.data?.error || 'Erro ao sincronizar.'); 
+        } finally { 
+            setSincronizandoId(null); 
+        }
+    };
+
+    const handleExcluirVoo = async (id) => {
+        if (!window.confirm("Remover este voo do painel?")) return;
+        await api.delete(`/voos/${id}`);
+        fetchTudo();
+    };
+
+    const getStatusStyle = (status) => {
+        const s = status?.toUpperCase();
+        if (s === 'CANCELADO') return 'bg-rose-100 text-rose-700 border-rose-200';
+        if (s === 'EM VOO' || s === 'ACTIVE') return 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse';
+        if (s === 'POUSADO' || s === 'LANDED') return 'bg-slate-100 text-slate-600 border-slate-200';
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200'; // Default para Confirmado/Scheduled
     };
 
     return (
-        <div className="p-8 max-w-6xl mx-auto">
-            <h1 className="text-2xl font-bold text-slate-800 mb-2 flex items-center gap-2">
-                <PlaneTakeoff /> Passageiros em Operação
-            </h1>
-            <p className="text-slate-500 mb-8">Painel unificado de voos e hotéis ativos no momento.</p>
+        <div className="p-8 max-w-7xl mx-auto">
+            <header className="mb-8">
+                <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Operações Ativas</h1>
+                <p className="text-slate-500 font-medium">Controle de embarques e monitoramento.</p>
+            </header>
 
-            {loading ? (
-                <div className="text-center p-12 text-slate-500 font-medium animate-pulse">Carregando painel de operações da agência...</div>
-            ) : (
+            <div className="flex gap-4 mb-8 border-b">
+                <button onClick={() => setAbaAtiva('aereo')} className={`pb-4 px-6 font-bold transition ${abaAtiva === 'aereo' ? 'border-b-4 border-blue-600 text-blue-600' : 'text-slate-400'}`}>
+                    <Plane className="inline mr-2" size={20} /> Aéreo ({voos.length})
+                </button>
+                <button onClick={() => setAbaAtiva('hotel')} className={`pb-4 px-6 font-bold transition ${abaAtiva === 'hotel' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-slate-400'}`}>
+                    <BedDouble className="inline mr-2" size={20} /> Hotelaria ({hoteis.length})
+                </button>
+            </div>
+
+            {loading ? <div className="text-center p-20 text-slate-400">Carregando painel...</div> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {operacoes.map((op) => {
-                        const status = calcularStatus(op.dataComparacao);
-                        const isVoo = op.tipoOperacao === 'VOO';
-                        
-                        return (
-                            <div key={op._id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition">
-                                {/* Cabeçalho com o Status e o ícone Dinâmico */}
-                                <div className={`p-4 border-b flex justify-between items-start ${status.label === 'Em Viagem' ? 'bg-emerald-50' : 'bg-slate-50'}`}>
-                                    <div className="flex items-start gap-3">
-                                        <div className={`p-2 rounded-lg text-white ${isVoo ? 'bg-blue-600' : 'bg-indigo-600'}`}>
-                                            {isVoo ? <Plane size={20} /> : <BedDouble size={20} />}
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-slate-800 text-sm">{op.nomeViajante}</h3>
-                                            <span className="text-xs text-slate-500 uppercase font-semibold">Via {op.cliente?.nome || 'N/A'}</span>
-                                        </div>
-                                    </div>
-                                    <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold border ${status.color}`}>
-                                        {status.label}
-                                    </span>
+                    {abaAtiva === 'aereo' ? voos.map(v => (
+                        <div key={v._id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-black bg-blue-600 px-2 py-0.5 rounded uppercase">{v.ciaAerea}</span>
+                                    <span className="text-[10px] font-mono text-slate-400 mt-1">{v.numeroVoo || 'VOO'}</span>
                                 </div>
-                                
-                                {/* Corpo do Card */}
-                                <div className="p-4 space-y-4">
-                                    <div className="flex items-start gap-3">
-                                        <MapPin className="text-slate-400 mt-1" size={16} />
-                                        <div>
-                                            <p className="font-bold text-slate-700 text-sm">{op.tituloPrincipal}</p>
-                                            <p className="text-xs text-slate-500">{op.subtitulo}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-start gap-3">
-                                        <CalendarDays className="text-slate-400 mt-1" size={16} />
-                                        <div className="text-sm">
-                                            {isVoo ? (
-                                                <p className="text-slate-600"><span className="font-medium text-emerald-600">Embarque:</span> {new Date(op.dataEmbarque).toLocaleString('pt-BR').substring(0, 16)}</p>
-                                            ) : (
-                                                <>
-                                                    <p className="text-slate-600"><span className="font-medium text-emerald-600">In:</span> {formatarData(op.checkIn)}</p>
-                                                    <p className="text-slate-600"><span className="font-medium text-rose-600">Out:</span> {formatarData(op.checkOut)}</p>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="bg-slate-50 p-2 rounded flex justify-between items-center border border-slate-100">
-                                        <span className="text-xs font-semibold text-slate-500">Localizador</span>
-                                        <span className="font-mono text-xs font-bold text-slate-800">{op.localizador}</span>
-                                    </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs font-bold text-blue-400">{v.localizador}</span>
+                                    <button onClick={() => handleExcluirVoo(v._id)} className="text-slate-500 hover:text-rose-400 transition"><Trash2 size={14}/></button>
                                 </div>
                             </div>
-                        );
-                    })}
-                    
-                    {operacoes.length === 0 && (
-                        <div className="col-span-full p-12 text-center text-slate-500 bg-white rounded-xl border border-dashed border-slate-300">
-                            Nenhuma operação ativa no sistema.
+                            <div className="p-5 flex-1 flex flex-col">
+                                <div className="flex justify-between items-center mb-6">
+                                    <div className="text-center">
+                                        <h4 className="text-2xl font-black text-slate-800">{v.origem}</h4>
+                                        <p className="text-[10px] text-slate-400 uppercase">Origem</p>
+                                    </div>
+                                    <div className="flex-1 border-t-2 border-dashed border-slate-100 mx-4 relative">
+                                        <Plane className="text-blue-500 absolute -top-3 left-1/2 -translate-x-1/2 bg-white px-1" size={24} />
+                                    </div>
+                                    <div className="text-center">
+                                        <h4 className="text-2xl font-black text-slate-800">{v.destino}</h4>
+                                        <p className="text-[10px] text-slate-400 uppercase">Destino</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-3 mb-6 flex-1">
+                                    <div className="flex items-center gap-2 text-sm text-slate-600 font-medium"><CalendarDays size={16} className="text-blue-500" /> {new Date(v.dataEmbarque).toLocaleString('pt-BR')}</div>
+                                    <div className="flex items-center gap-2 text-sm font-bold text-slate-800"><CheckCircle2 size={16} className="text-emerald-500" /> {v.passageiro}</div>
+                                </div>
+                                <div className={`mb-4 text-center py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest ${getStatusStyle(v.statusMonitoramento)}`}>
+                                    STATUS: {v.statusMonitoramento || 'CONFIRMADO'}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={() => handleSincronizar(v._id)} disabled={sincronizandoId === v._id} className="flex items-center justify-center gap-2 bg-slate-100 text-slate-600 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-200">
+                                        <RefreshCw size={14} className={sincronizandoId === v._id ? 'animate-spin' : ''} /> Status
+                                    </button>
+                                    <button onClick={() => handleEnviarResumo(v)} className="flex items-center justify-center gap-2 bg-emerald-100 text-emerald-700 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-200 transition">
+                                        <MessageSquare size={14} /> Resumo
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    )}
+                    )) : hoteis.map(h => (
+                        <div key={h._id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="p-4 bg-indigo-900 text-white flex justify-between items-center">
+                                <span className="text-xs font-bold">{h.hotel}</span>
+                                <span className="text-xs font-mono text-indigo-300 uppercase">{h.localizador}</span>
+                            </div>
+                            <div className="p-5">
+                                <div className="flex items-start gap-3 mb-6">
+                                    <div className="bg-indigo-50 p-2 rounded-lg"><MapPin className="text-indigo-600" size={20} /></div>
+                                    <div><p className="font-bold text-slate-800 leading-tight">{h.hotel}</p><p className="text-xs text-slate-500 font-medium">{h.cidade}</p></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6">
+                                    <div><p className="text-[10px] text-slate-400 uppercase font-black">In</p><p className="text-sm font-bold text-slate-700">{formatarData(h.checkIn)}</p></div>
+                                    <div><p className="text-[10px] text-slate-400 uppercase font-black">Out</p><p className="text-sm font-bold text-slate-700">{formatarData(h.checkOut)}</p></div>
+                                </div>
+                                <button onClick={() => handleEnviarResumo(h)} className="w-full flex items-center justify-center gap-2 bg-emerald-100 text-emerald-700 py-3 rounded-xl text-xs font-bold hover:bg-emerald-200">
+                                    <MessageSquare size={16} /> Enviar Resumo WhatsApp
+                                </button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

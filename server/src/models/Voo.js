@@ -1,26 +1,16 @@
 const mongoose = require('mongoose');
 
 const vooSchema = new mongoose.Schema({
-    // Relacionamento com o dono da reserva (A Empresa ou PF que solicitou)
-    cliente: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Cliente',
-        required: true
-    },
-    // Passageiro que vai embarcar (Pode ser diferente do cliente)
+    cliente: { type: mongoose.Schema.Types.ObjectId, ref: 'Cliente', required: true },
     passageiro: { type: String, required: true },
-    
-    // Dados do Voo
     ciaAerea: { type: String, required: true },
     localizador: { type: String, required: true, uppercase: true },
-    origem: { type: String, required: true, uppercase: true }, // Ex: GRU
-    destino: { type: String, required: true, uppercase: true }, // Ex: JFK
-    
-    // Datas críticas
+    numeroVoo: { type: String }, // Ex: LA3456
+    origem: { type: String, required: true, uppercase: true },
+    destino: { type: String, required: true, uppercase: true },
     dataEmbarque: { type: Date, required: true },
-    dataDesembarque: { type: Date }, // Opcional, útil para voos longos
-    
-    status: { type: String, default: 'Confirmado' }
+    internacional: { type: Boolean, default: false }, // NOVO
+    statusMonitoramento: { type: String, default: 'scheduled' } // scheduled, cancelled, delayed
 }, { timestamps: true });
 
 module.exports = mongoose.model('Voo', vooSchema);

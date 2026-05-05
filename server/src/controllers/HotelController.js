@@ -71,6 +71,29 @@ class HotelController {
             return res.status(500).json({ error: 'Erro ao buscar todas as reservas.' });
         }
     }
+
+    async atualizar(req, res) {
+        try {
+            const { id } = req.params;
+            const hotelAtualizado = await Hotel.findByIdAndUpdate(id, req.body, { new: true });
+            if (!hotelAtualizado) return res.status(404).json({ error: 'Reserva não encontrada.' });
+            return res.json(hotelAtualizado);
+        } catch (error) {
+            return res.status(500).json({ error: 'Erro ao atualizar hotel.' });
+        }
+    }
+
+    async excluir(req, res) {
+        try {
+            const { id } = req.params;
+            const hotelExcluido = await Hotel.findByIdAndDelete(id);
+            if (!hotelExcluido) return res.status(404).json({ error: 'Reserva não encontrada.' });
+            return res.json({ message: 'Reserva excluída com sucesso.' });
+        } catch (error) {
+            return res.status(500).json({ error: 'Erro ao excluir reserva.' });
+        }
+    }
+
 }
 
 module.exports = new HotelController();

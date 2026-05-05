@@ -1,53 +1,89 @@
 const Voo = require('../models/Voo');
 const Cliente = require('../models/Cliente');
+const VooMonitorService = require('../services/VooMonitorService');
 const IAExtracaoService = require('../services/IAExtracaoService');
 
 class VooController {
-    // Processar PDF da passagem
     async processarBilhete(req, res) {
         try {
             const { cpfCliente } = req.body;
-
             if (!req.file) return res.status(400).json({ error: 'Nenhum bilhete enviado.' });
 
             const cliente = await Cliente.findOne({ cpf: cpfCliente });
-            if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado. Cadastre-o primeiro.' });
+            if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
-            console.log("✈️ Processando bilhete via IA...");
             const dadosIA = await IAExtracaoService.extrairDadosVoo(req.file.buffer, req.file.mimetype);
-            
-            // LOG IMPORTANTE: Vai mostrar o que a IA conseguiu ler do PDF do BRT
-            console.log("🧠 Dados retornados pela IA:", dadosIA);
 
-            // Salva no Banco de Dados
             const novoVoo = await Voo.create({
                 cliente: cliente._id,
-                passageiro: dadosIA.passageiro || 'Não Extraído',
-                ciaAerea: dadosIA.ciaAerea || 'Não Identificada',
-                localizador: dadosIA.localizador || 'N/A',
-                origem: dadosIA.origem || 'N/A',
-                destino: dadosIA.destino || 'N/A',
-                dataEmbarque: dadosIA.dataEmbarque || new Date() // Previne erro do banco se a IA não achar a data
+                passageiro: dadosIA.passageiro,
+                ciaAerea: dadosIA.ciaAerea,
+                localizador: dadosIA.localizador,
+                origem: dadosIA.origem,
+                destino: dadosIA.destino,
+                dataEmbarque: dadosIA.dataEmbarque,
+                numeroVoo: dadosIA.numeroVoo || '',
+                statusMonitoramento: 'Confirmado' // Status inicial padrão
             });
 
-            console.log("✅ Voo salvo com sucesso no banco!");
             return res.status(201).json(novoVoo);
         } catch (error) {
-            // LOG DE ERRO MELHORADO: Vai gritar no seu terminal do VS Code o motivo real
-            console.error("❌ ERRO GRAVE NO CONTROLADOR DE VOO:", error);
-            return res.status(500).json({ error: 'Erro ao processar o bilhete aéreo. Veja o terminal.' });
+            console.error(error);
+            return res.status(500).json({ error: 'Erro ao processar bilhete.' });
         }
     }
 
-    // Listar Voos (Usado para a aba "Em Viagem")
     async listar(req, res) {
         try {
-            // Traz os voos junto com os dados de quem pagou/solicitou (Relacionamento)
-            const voos = await Voo.find().populate('cliente', 'nome cpf tipo').sort({ dataEmbarque: 1 });
+            const voos = await Voo.find().populate('cliente', 'nome').sort({ dataEmbarque: 1 });
             return res.json(voos);
         } catch (error) {
             return res.status(500).json({ error: 'Erro ao listar voos.' });
         }
+    }
+
+    async sincronizarStatus(req, res) {
+        try {
+            const voo = await Voo.findById(req.params.id);
+            if (!voo) return res.status(404).json({ error: 'Voo não encontrado.' });
+
+            const identificador = voo.numeroVoo || voo.localizador;
+            const dadosAPI = await VooMonitorService.buscarStatusVoo(identificador);
+            
+            if (dadosAPI) {
+                // Mapeamento de status da Aviationstack para termos em Português
+                const mapaStatus = {
+                    'scheduled': 'Confirmado',
+                    'active': 'Em Voo',
+                    'landed': 'Pousado',
+                    'cancelled': 'Cancelado',
+                    'incident': 'Atrasado',
+                    'diverted': 'Alternado'
+                };
+
+                voo.statusMonitoramento = mapaStatus[dadosAPI.status] || dadosAPI.status;
+                await voo.save();
+                return res.json(voo); // Retorna o voo completo atualizado
+            }
+            
+            return res.status(404).json({ error: 'Sem dados novos da Cia Aérea.' });
+        } catch (error) {
+            return res.status(500).json({ error: 'Falha na sincronização.' });
+        }
+    }
+
+    async atualizar(req, res) {
+        try {
+            const voo = await Voo.findByIdAndUpdate(req.params.id, req.body, { new: true });
+            return res.json(voo);
+        } catch (e) { return res.status(500).json({ error: 'Erro ao atualizar.' }); }
+    }
+
+    async excluir(req, res) {
+        try {
+            await Voo.findByIdAndDelete(req.params.id);
+            return res.json({ message: 'Excluído' });
+        } catch (e) { return res.status(500).json({ error: 'Erro ao excluir.' }); }
     }
 }
 
